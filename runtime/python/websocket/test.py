@@ -1,5 +1,6 @@
 # -*- encoding: utf-8 -*-
 import os
+import io
 
 import websockets
 import asyncio
@@ -84,9 +85,7 @@ def get_parser():
 # offline_msg_done = False
 
 
-async def record_from_scp(args, websocket, done_event):
-    wavs = [args.audio_in]
-
+async def record_from_scp(wav_file,args, websocket, done_event):
     hotword_msg = ""
 
     wav_format = "pcm"
@@ -94,7 +93,11 @@ async def record_from_scp(args, websocket, done_event):
     if args.use_itn == 0:
         use_itn = False
 
-    wav = wavs[0]
+    if isinstance(wav_file, str):
+        wav = wav_file
+    else:
+        wav = wav_file.filename
+
     wav_splits = wav.strip().split()
 
     wav_name = wav_splits[0] if len(wav_splits) > 1 else "demo"
@@ -102,10 +105,16 @@ async def record_from_scp(args, websocket, done_event):
     if not len(wav_path.strip()) > 0:
         return
 
-    with wave.open(wav_path, "rb") as wav_file:
-        sample_rate = wav_file.getframerate()
-        frames = wav_file.readframes(wav_file.getnframes())
-        audio_bytes = bytes(frames)
+    if isinstance(wav_file, str):
+        with wave.open(wav_path, "rb") as wav_file:
+            sample_rate = wav_file.getframerate()
+            frames = wav_file.readframes(wav_file.getnframes())
+            audio_bytes = bytes(frames)
+    else:
+        with wave.open(io.BytesIO(wav_file.read()), "rb") as wav_file:
+            sample_rate = wav_file.getframerate()
+            frames = wav_file.readframes(wav_file.getnframes())
+            audio_bytes = bytes(frames)
 
     stride = int(60 * args.chunk_size[1] / args.chunk_interval / 1000 * sample_rate * 2)
     chunk_num = (len(audio_bytes) - 1) // stride + 1
@@ -185,7 +194,7 @@ async def ws_client(wav_file):
     global offline_msg_done
 
     parser = get_parser()
-    args = parser.parse_args(["--audio_in", wav_file])
+    args = parser.parse_args(["--host","172.24.4.18","--port","12395"])
     args.chunk_size = [int(x) for x in args.chunk_size.split(",")]
     if args.output_dir is not None:
         if not os.path.exists(args.output_dir):
@@ -200,11 +209,12 @@ async def ws_client(wav_file):
 
     # print("connect to", uri)
     async with websockets.connect(uri, subprotocols=["binary"], ping_interval=None, ssl=ssl_context) as websocket:
-        record_task = asyncio.create_task(record_from_scp(args, websocket, done_event))
+        record_task = asyncio.create_task(record_from_scp(wav_file,args, websocket, done_event))
         message_task = asyncio.create_task(message(websocket, done_event))
         await record_task  # 等待record_from_scp完成
         pure_text = await message_task  # 等待message完成并获取返回值
     return pure_text  # 返回message函数的返回值
+
 
 
 def audio_trans(wav_file) -> str:
