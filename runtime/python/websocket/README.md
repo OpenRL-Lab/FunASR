@@ -43,6 +43,10 @@ python funasr_wss_server.py --port 10095
 
 Install the requirements for client
 ```shell
+sudo apt-get install portaudio19-dev # for ubuntu
+# sudo yum install portaudio-devel # for centos
+# brew install portaudio # for mac
+
 git clone https://github.com/alibaba/FunASR.git && cd FunASR
 cd funasr/runtime/python/websocket
 pip install -r requirements_client.txt
